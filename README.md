@@ -1,6 +1,7 @@
 # hotreload.nvim
 
 A Neovim plugin that automatically runs `:checktime` on visible buffers when they change on disk.
+This is quite usefull when working with cli based AI agents like claude code or cursor since you can see the files changing in real time.
 
 ## Features
 
