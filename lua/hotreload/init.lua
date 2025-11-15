@@ -64,8 +64,14 @@ local function reload_buffer_if_unmodified(buf, silent)
 
     if not is_buffer_modified(buf) then
         if silent then
-            -- Capture and discard output to fully suppress messages
-            vim.fn.execute('checktime', 'silent')
+            -- Directly reload buffer without triggering autoread messages
+            -- Using edit! with silent and noautocmd to avoid messages
+            local bufname = vim.api.nvim_buf_get_name(buf)
+            if bufname ~= '' then
+                vim.api.nvim_buf_call(buf, function()
+                    vim.cmd('silent! noautocmd edit!')
+                end)
+            end
         else
             vim.cmd('checktime')
         end
