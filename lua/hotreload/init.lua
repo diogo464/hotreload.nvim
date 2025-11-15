@@ -56,8 +56,16 @@ local function reload_buffer_if_unmodified(buf)
     end
 end
 
-local function reload_all_buffers()
-    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+local function reload_visible_buffers()
+    -- Get all visible buffers by iterating through windows
+    local visible_buffers = {}
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        visible_buffers[buf] = true
+    end
+
+    -- Only reload buffers that are currently visible
+    for buf, _ in pairs(visible_buffers) do
         reload_buffer_if_unmodified(buf)
     end
 end
@@ -69,7 +77,7 @@ function M.setup(opts)
     M.options = options_from_table(opts)
 
     local timer = vim.uv.new_timer()
-    vim.uv.timer_start(timer, M.options.interval, M.options.interval, vim.schedule_wrap(reload_all_buffers))
+    vim.uv.timer_start(timer, M.options.interval, M.options.interval, vim.schedule_wrap(reload_visible_buffers))
 
     vim.api.nvim_create_autocmd('BufEnter', {
         callback = function()
