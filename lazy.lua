@@ -1,1 +1,1 @@
-return { 'diogo464/hotreload.nvim', opts = {} }
+return { 'lanej/hotreload.nvim', opts = {} }
