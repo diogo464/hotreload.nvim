@@ -64,7 +64,11 @@ local function reload_buffer_if_unmodified(buf, silent)
 
     if not is_buffer_modified(buf) then
         if silent then
+            -- Temporarily add 'F' to shortmess to suppress file info messages
+            local old_shortmess = vim.o.shortmess
+            vim.o.shortmess = vim.o.shortmess .. 'F'
             vim.cmd('silent! checktime')
+            vim.o.shortmess = old_shortmess
         else
             vim.cmd('checktime')
         end
