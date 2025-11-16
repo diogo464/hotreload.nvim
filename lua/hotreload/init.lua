@@ -64,13 +64,33 @@ local function reload_buffer_if_unmodified(buf, silent)
 
     if not is_buffer_modified(buf) then
         if silent then
-            -- Directly reload buffer without triggering autoread messages
-            -- Using edit! with silent and noautocmd to avoid messages
+            -- Reload buffer by reading file directly, then trigger necessary autocmds
             local bufname = vim.api.nvim_buf_get_name(buf)
             if bufname ~= '' then
-                vim.api.nvim_buf_call(buf, function()
-                    vim.cmd('silent! noautocmd edit!')
-                end)
+                -- Read file contents
+                local file = io.open(bufname, 'r')
+                if file then
+                    local content = file:read('*all')
+                    file:close()
+
+                    -- Split into lines
+                    local lines = vim.split(content, '\n', { plain = true })
+                    -- Remove trailing empty line if file doesn't end with newline
+                    if lines[#lines] == '' then
+                        table.remove(lines)
+                    end
+
+                    -- Update buffer content
+                    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+                    -- Mark as unmodified
+                    vim.api.nvim_set_option_value('modified', false, { buf = buf })
+
+                    -- Trigger syntax and treesitter updates
+                    vim.api.nvim_buf_call(buf, function()
+                        vim.cmd('doautocmd BufReadPost')
+                    end)
+                end
             end
         else
             vim.cmd('checktime')
