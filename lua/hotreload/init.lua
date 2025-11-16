@@ -66,9 +66,15 @@ local function reload_buffer_if_unmodified(buf, silent)
         if silent then
             -- Temporarily ignore FileChangedShell events to suppress messages
             local old_eventignore = vim.o.eventignore
-            vim.o.eventignore = 'FileChangedShell'
+            -- Append to existing eventignore instead of replacing
+            if old_eventignore == '' then
+                vim.o.eventignore = 'FileChangedShell'
+            else
+                vim.o.eventignore = old_eventignore .. ',FileChangedShell'
+            end
 
-            vim.api.nvim_buf_call(buf, function()
+            -- Wrap in pcall to handle buffer becoming invalid
+            pcall(vim.api.nvim_buf_call, buf, function()
                 vim.cmd('silent! checktime')
             end)
 
@@ -76,6 +82,18 @@ local function reload_buffer_if_unmodified(buf, silent)
         else
             vim.cmd('checktime')
         end
+    end
+end
+
+---Stop watching a buffer
+---@param buf integer
+local function stop_watching_buffer(buf)
+    local w = watchers[buf]
+    if w then
+        pcall(function()
+            w:stop()
+        end)
+        watchers[buf] = nil
     end
 end
 
@@ -99,6 +117,11 @@ local function start_watching_buffer(buf, silent)
 
     local w = vim.uv.new_fs_event()
     if not w then
+        -- Only warn once per session to avoid spam
+        if not M._fs_event_warned then
+            vim.notify('hotreload.nvim: Failed to create fs_event watcher. Falling back to polling if enabled.', vim.log.levels.WARN)
+            M._fs_event_warned = true
+        end
         return
     end
 
@@ -122,18 +145,12 @@ local function start_watching_buffer(buf, silent)
 
     if ok then
         watchers[buf] = w
-    end
-end
-
----Stop watching a buffer
----@param buf integer
-local function stop_watching_buffer(buf)
-    local w = watchers[buf]
-    if w then
-        pcall(function()
-            w:stop()
-        end)
-        watchers[buf] = nil
+    else
+        -- Log watcher start failure
+        if not M._fs_event_start_warned then
+            vim.notify('hotreload.nvim: Failed to start fs_event watcher: ' .. tostring(err), vim.log.levels.WARN)
+            M._fs_event_start_warned = true
+        end
     end
 end
 
@@ -183,6 +200,13 @@ end
 function M.setup(opts)
     M.options = options_from_table(opts)
 
+    -- Validate options
+    if M.options.interval ~= nil then
+        assert(type(M.options.interval) == 'number', 'hotreload.nvim: interval must be a number or nil')
+        assert(M.options.interval > 0, 'hotreload.nvim: interval must be positive')
+    end
+    assert(type(M.options.silent) == 'boolean', 'hotreload.nvim: silent must be a boolean')
+
     -- Set up fs_event watchers on buffer/window changes
     vim.api.nvim_create_autocmd({'BufEnter', 'WinEnter'}, {
         callback = function()
@@ -194,6 +218,15 @@ function M.setup(opts)
     vim.api.nvim_create_autocmd('BufDelete', {
         callback = function(args)
             stop_watching_buffer(args.buf)
+        end
+    })
+
+    -- Clean up all watchers on exit
+    vim.api.nvim_create_autocmd('VimLeavePre', {
+        callback = function()
+            for buf, _ in pairs(watchers) do
+                stop_watching_buffer(buf)
+            end
         end
     })
 
