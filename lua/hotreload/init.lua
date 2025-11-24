@@ -174,7 +174,13 @@ local function update_watchers()
 
     -- Start watching newly visible buffers
     for buf, _ in pairs(visible_buffers) do
+        local was_not_watching = not watchers[buf]
         start_watching_buffer(buf, M.options.silent)
+        -- If we just started watching this buffer (it became visible),
+        -- check if it was modified while hidden
+        if was_not_watching then
+            reload_buffer_if_unmodified(buf, M.options.silent)
+        end
     end
 end
 
