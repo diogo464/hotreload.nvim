@@ -154,30 +154,28 @@ local function start_watching_buffer(buf, silent)
     end
 end
 
----Update watchers to match currently visible buffers
+---Update watchers to match currently loaded buffers
 local function update_watchers()
-    -- Get all visible buffers
-    local visible_buffers = {}
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local buf = vim.api.nvim_win_get_buf(win)
-        if vim.api.nvim_buf_is_valid(buf) and does_buffer_have_backing_file(buf) then
-            visible_buffers[buf] = true
+    -- Get all loaded buffers with backing files
+    local loaded_buffers = {}
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_loaded(buf) and does_buffer_have_backing_file(buf) then
+            loaded_buffers[buf] = true
         end
     end
 
-    -- Stop watching buffers that are no longer visible
+    -- Stop watching buffers that are no longer loaded or valid
     for buf, _ in pairs(watchers) do
-        if not visible_buffers[buf] or not vim.api.nvim_buf_is_valid(buf) then
+        if not loaded_buffers[buf] or not vim.api.nvim_buf_is_valid(buf) then
             stop_watching_buffer(buf)
         end
     end
 
-    -- Start watching newly visible buffers
-    for buf, _ in pairs(visible_buffers) do
+    -- Start watching newly loaded buffers
+    for buf, _ in pairs(loaded_buffers) do
         local was_not_watching = not watchers[buf]
         start_watching_buffer(buf, M.options.silent)
-        -- If we just started watching this buffer (it became visible),
-        -- check if it was modified while hidden
+        -- If we just started watching this buffer, check if it was modified while not watched
         if was_not_watching then
             reload_buffer_if_unmodified(buf, M.options.silent)
         end
@@ -213,8 +211,11 @@ function M.setup(opts)
     end
     assert(type(M.options.silent) == 'boolean', 'hotreload.nvim: silent must be a boolean')
 
-    -- Set up fs_event watchers on buffer/window changes
-    vim.api.nvim_create_autocmd({'BufEnter', 'WinEnter'}, {
+    -- Set up fs_event watchers for all loaded buffers
+    -- BufEnter: When entering any buffer
+    -- BufAdd: When a buffer is added to the buffer list
+    -- FocusGained: When Neovim gains focus (e.g., switching tmux panes)
+    vim.api.nvim_create_autocmd({'BufEnter', 'BufAdd', 'FocusGained'}, {
         callback = function()
             update_watchers()
         end
